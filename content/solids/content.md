@@ -2924,9 +2924,18 @@ Archimedes proved that there is exactly the **_same ratio_** between their volum
 
 :::
 
+---
+> id: i-507
+
 To find this ratio, let’s use the water experiment we have used before when comparing the pyramids and prisms.
 
 We need to have a cylinder and cone with the same heights as the diameter of their bases **(h = 2r)** and a sphere with exactly the same diameter.
+
+    // INTERACTIVE-5.07
+
+    figure
+      x-solid(size=600 static)
+      x-slider(steps=100 speed=1 continuous)
 
     figure: x-img(src="images/ch5_35.svg" width="600" height="196")
 

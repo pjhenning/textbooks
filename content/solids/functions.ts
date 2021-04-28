@@ -17,7 +17,7 @@ import {Solid, Vector} from '../shared/components/webgl/solid';
 import {BinarySwipe} from '../shared/components/binary-swipe/binary-swipe';
 import {layers, templeParts} from './data/voxel-data';
 import {pyramid1, triangularPrism, truncatedIcosahedron} from './data/net-data';
-import {NetPosition, setupDieFacesPlacement} from './components/util';
+import {NetPosition, setupDieFacesPlacement, WaterCone, WaterCylinder} from './components/util';
 
 import './components/voxel-painter';
 import './components/net';
@@ -349,6 +349,29 @@ export function honeycombIntro($step: Step) {
 export function netsProperties($step: Step) {
   const $swipe = $step.$('x-binary-swipe') as BinarySwipe;
   $swipe.on('complete', () => $step.score('all-swiped'));
+}
+
+export async function i507($step: Step) {
+  const $solid = $step.$('x-solid') as Solid;
+  const $slider = $step.$('x-slider') as Slider;
+
+  const radius = 1.3;
+  const height = radius * 2;
+  const centerOffset = radius + 0.5;
+
+  if (!$solid.isReady) await $solid.onPromise('loaded');
+  const cone = new WaterCone(radius, height, new THREE.Vector3(centerOffset, 0, 0), $solid);
+  const cylinder = new WaterCylinder(radius, height, new THREE.Vector3(-centerOffset, 0, 0), $solid);
+  cylinder.setFillAmount(1);
+  ($solid.scene.camera as THREE.PerspectiveCamera).setFocalLength(33);
+  $solid.scene.draw();
+
+  $slider.on('move', n => {
+    const percent = n / 100;
+    cylinder.setFillAmount(1 - (percent * 0.3));
+    cone.setFillAmount(percent);
+    $solid.scene.draw();
+  });
 }
 
 export async function voxelBuilderQuestion($step: Step) {

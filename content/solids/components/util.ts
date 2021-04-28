@@ -1,6 +1,7 @@
 import {$N, ElementView, observe, SVGParentView, SVGView} from '@mathigon/boost';
-import {Point, Rectangle} from '@mathigon/euclid';
+import {Angle, Point, Rectangle} from '@mathigon/euclid';
 import {Draggable, Step} from '@mathigon/studio';
+import {Solid} from '../../shared/components/webgl/solid';
 
 const DOTS = [
   [],  // 0
@@ -121,3 +122,154 @@ export function setupDieFacesPlacement($step: Step, netPositions: NetPosition[])
     });
   }
 }
+
+abstract class WaterShape {
+  protected innerRadius: number;
+  protected innerHeight: number;
+  protected cap: ReturnType<Solid['addSolid']>;
+  protected clippingPlane: THREE.Plane;
+  protected waterBody: ReturnType<Solid['addSolid']>;
+
+  constructor(containerRadius: number, containerHeight: number, protected center: THREE.Vector3, $solid: Solid) {
+    const waterShapeScale = 0.99;
+    this.innerHeight = waterShapeScale * containerHeight;
+    this.innerRadius = waterShapeScale * containerRadius;
+
+    const shapeGeo = this.geo(containerRadius, containerHeight);
+
+    const capGeo = new THREE.CircleGeometry(this.innerRadius, 32);
+    capGeo.rotateX(Angle.fromDegrees(90).rad);
+
+    this.clippingPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0));
+
+    const waterGeo = shapeGeo.clone().scale(waterShapeScale, waterShapeScale, waterShapeScale);
+
+    this.waterBody = $solid.addSolid(waterGeo, 0x0f82f2, {clippingPlanes: [this.clippingPlane]});
+    this.waterBody.position.set(center.x, center.y, center.z);
+
+    this.cap = $solid.addSolid(capGeo, 0x0f82f2);
+
+    this.waterLevel = 0;
+
+    const container = $solid.addOutlined(shapeGeo);
+    container.position.set(center.x, center.y, center.z);
+  }
+
+  get fillStart() {
+    const yDepthFromCenter = this.center.y - (this.innerHeight / 2);
+    return new THREE.Vector3(this.center.x, yDepthFromCenter, this.center.z);
+  }
+
+  abstract geo(radius: number, height: number): THREE.Geometry;
+
+  private set waterLevel(waterLevel: number) {
+    const newCapY = this.fillStart.y + waterLevel;
+    this.capPosition = new THREE.Vector3(this.center.x, newCapY, this.center.z);
+    if (waterLevel < 0.01) {
+      this.cap.visible = false;
+      this.waterBody.visible = false;
+    } else {
+      this.cap.visible = true;
+      this.waterBody.visible = true;
+    }
+  }
+
+  private set capPosition(pos: THREE.Vector3) {
+    this.cap.position.set(pos.x, pos.y, pos.z);
+    this.clippingPlane.setFromNormalAndCoplanarPoint(this.clippingPlane.normal, this.cap.position);
+  }
+
+  setFillAmount(percent: number) {
+    this.waterLevel = this.waterHeightForFilledPercent(percent);
+    const capScale = this.capScaleForFilledPercent(percent);
+    this.cap.scale.set(capScale, 1, capScale);
+  }
+
+  abstract waterHeightForFilledPercent(filledPercent: number): number;
+
+  protected capScaleForFilledPercent(filledPercent: number) {
+    return this.capRadiusForFilledPercent(filledPercent) / this.innerRadius;
+  }
+
+  abstract capRadiusForFilledPercent(filledPercent: number): number;
+}
+
+export class WaterCone extends WaterShape {
+  geo(radius: number, height: number) {
+    return new THREE.ConeGeometry(radius, height, 128, 1);
+  }
+
+  waterHeightForFilledPercent(filledPercent: number) {
+    const invPercent = 1 - filledPercent;
+    return this.innerHeight - (((this.innerHeight ** 3) * invPercent) ** (1 / 3));
+  }
+
+  capRadiusForFilledPercent(filledPercent: number) {
+    const invPercent = 1 - filledPercent;
+    return ((this.innerRadius ** 3) * invPercent) ** (1 / 3);
+  }
+}
+
+export class WaterCylinder extends WaterShape {
+  geo(radius: number, height: number) {
+    return new THREE.CylinderGeometry(radius, radius, height, 128, 1);
+  }
+
+  waterHeightForFilledPercent(percent: number) {
+    const rSq = this.innerRadius ** 2;
+    const maxVolume = Math.PI * rSq * this.innerHeight;
+    const currentVolume = maxVolume * percent;
+    return currentVolume / (Math.PI * rSq);
+  }
+
+  capRadiusForFilledPercent(_filledPercent: number) {
+    return this.innerRadius;
+  }
+}
+
+
+export class WaterSphere extends WaterShape {
+  private waterHeight: number;
+
+  constructor(containerRadius: number, center: THREE.Vector3, $solid: Solid) {
+    super(containerRadius, containerRadius * 2, center, $solid);
+    this.waterHeight = 0;
+  }
+
+  geo(radius: number, _height: number) {
+    return new THREE.SphereGeometry(radius, 32, 32);
+  }
+
+  /** [TODO] */
+  waterHeightForFilledPercent(_filledPercent: number) {
+    this.waterHeight = 0;
+    return this.waterHeight;
+  }
+
+  capRadiusForFilledPercent(_filledPercent: number) {
+    const h_ = this.innerRadius - this.waterHeight;
+    return Math.sqrt((this.innerRadius ** 2) - (h_ ** 2));
+  }
+}
+
+/*
+class WaterSphere extends WaterShape {
+
+  geo(radius: number, _height: number) {
+    return new THREE.SphereGeometry(radius, 32, 32);
+  }
+
+  waterHeightFromFilledPercent(filledPercent: number, _heightMax: number, radius: number) {
+    const rSq = radius ** 2;
+    const maxVolume = Math.PI * rSq * heightMax;
+    const currentVolume = maxVolume * filledPercent;
+    return currentVolume / (Math.PI * rSq);
+  }
+
+  capRadiusFromFilledPercent(filledPercent: number, radiusMax: number) {
+
+    return radiusMax;
+  }
+
+}
+*/
