@@ -17,7 +17,7 @@ import {Solid, Vector} from '../shared/components/webgl/solid';
 import {BinarySwipe} from '../shared/components/binary-swipe/binary-swipe';
 import {layers, templeParts} from './data/voxel-data';
 import {pyramid1, triangularPrism, truncatedIcosahedron} from './data/net-data';
-import {NetPosition, setupDieFacesPlacement, WaterCone, WaterCylinder} from './components/util';
+import {NetPosition, setupDieFacesPlacement, setupHourglass, WaterCone, WaterCylinder} from './components/util';
 
 import './components/voxel-painter';
 import './components/net';
@@ -366,12 +366,7 @@ export async function i507($step: Step) {
   ($solid.scene.camera as THREE.PerspectiveCamera).setFocalLength(33);
   $solid.scene.draw();
 
-  $slider.on('move', n => {
-    const percent = n / 100;
-    cylinder.setFillAmount(1 - (percent * 0.3));
-    cone.setFillAmount(percent);
-    $solid.scene.draw();
-  });
+  setupHourglass({shape: cylinder, drainAmount: 1 / 3}, cone, $solid, $slider);
 }
 
 export async function voxelBuilderQuestion($step: Step) {
