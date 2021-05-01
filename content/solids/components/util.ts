@@ -194,13 +194,18 @@ abstract class WaterShape {
   abstract capRadiusForFilledPercent(filledPercent: number): number;
 }
 
-export function setupHourglass<A extends WaterShape, B extends WaterShape>(
+type WaterShapeT =
+  WaterCone |
+  WaterCylinder |
+  WaterSphere;
+
+export function setupHourglass(
     toDrain: {
-    shape: A,
+    shape: WaterShapeT,
     startAmount?: number,
     drainAmount: number
   },
-    toFill: B,
+    toFill: WaterShapeT,
     $solid: Solid,
     $slider: Slider
 ) {
@@ -247,23 +252,12 @@ export class WaterCylinder extends WaterShape {
 
 
 export class WaterSphere extends WaterShape {
-  private maxVolume: number;
   private waterHeight?: number;
-  private doublePiR3: number;
-  private fourPiR3: number;
-  private oneThird = 1 / 3;
-  private sqrt3 = Math.sqrt(3);
   private r2: number;
-  private b = (2 * Math.PI) ** this.oneThird;
-  private c: number;
 
   constructor(containerRadius: number, center: THREE.Vector3, $solid: Solid) {
     super(containerRadius, containerRadius * 2, center, $solid);
-    this.doublePiR3 = 2 * Math.PI * (this.innerRadius ** 3);
-    this.fourPiR3 = 2 * this.doublePiR3;
     this.r2 = this.innerRadius ** 2;
-    this.c = this.b * this.r2;
-    this.maxVolume = (4 / 3) * Math.PI * (this.innerRadius ** 3);
   }
 
   geo(radius: number, _height: number) {
@@ -276,14 +270,6 @@ export class WaterSphere extends WaterShape {
       this.waterHeight = undefined;
       return height;
     } else {
-      /*
-      const volumeFilled = this.maxVolume * filledPercent;
-      const l = (3 * (volumeFilled ** 2)) - (this.fourPiR3 * volumeFilled);
-      const j = this.sqrt3 * Math.sqrt(l);
-      const k = j + this.doublePiR3 - (3 * volumeFilled);
-      const a = k ** this.oneThird;
-      this.waterHeight = (a / this.b) + (this.c / a) + this.innerRadius;
-      */
       this.waterHeight = this.innerHeight * this.heightPercentForFilledPercent(filledPercent);
       return this.waterHeight;
     }
