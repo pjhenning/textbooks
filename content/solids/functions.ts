@@ -17,7 +17,7 @@ import {Solid, Vector} from '../shared/components/webgl/solid';
 import {BinarySwipe} from '../shared/components/binary-swipe/binary-swipe';
 import {layers, templeParts} from './data/voxel-data';
 import {pyramid1, triangularPrism, truncatedIcosahedron} from './data/net-data';
-import {NetPosition, setupDieFacesPlacement, setupHourglass, WaterCone, WaterCylinder} from './components/util';
+import {NetPosition, setupDieFacesPlacement, setupHourglass, WaterCone, WaterCylinder, WaterSphere} from './components/util';
 
 import './components/voxel-painter';
 import './components/net';
@@ -360,13 +360,14 @@ export async function i507($step: Step) {
   const centerOffset = radius + 0.5;
 
   if (!$solid.isReady) await $solid.onPromise('loaded');
-  const cone = new WaterCone(radius, height, new THREE.Vector3(centerOffset, 0, 0), $solid);
+  // const cone = new WaterCone(radius, height, new THREE.Vector3(centerOffset, 0, 0), $solid);
+  const sphere = new WaterSphere(radius, new THREE.Vector3(centerOffset, 0, 0), $solid);
   const cylinder = new WaterCylinder(radius, height, new THREE.Vector3(-centerOffset, 0, 0), $solid);
-  cylinder.setFillAmount(1);
+  cylinder.setFillAmount(2 / 3);
   ($solid.scene.camera as THREE.PerspectiveCamera).setFocalLength(33);
   $solid.scene.draw();
 
-  setupHourglass({shape: cylinder, drainAmount: 1 / 3}, cone, $solid, $slider);
+  setupHourglass({shape: cylinder, drainAmount: 2 / 3, startAmount: 2 / 3}, sphere, $solid, $slider);
 }
 
 export async function voxelBuilderQuestion($step: Step) {
