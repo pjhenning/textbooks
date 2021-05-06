@@ -123,12 +123,15 @@ export function setupDieFacesPlacement($step: Step, netPositions: NetPosition[])
   }
 }
 
+type O3D = ReturnType<Solid['addSolid']>;
+
 abstract class WaterShape {
   protected innerRadius: number;
   protected innerHeight: number;
-  protected cap: ReturnType<Solid['addSolid']>;
+  protected cap: O3D;
   protected clippingPlane: THREE.Plane;
-  protected waterBody: ReturnType<Solid['addSolid']>;
+  protected waterBody: O3D;
+  private waterColor = 0x0f82f2;
 
   constructor(containerRadius: number, containerHeight: number, protected center: THREE.Vector3, $solid: Solid) {
     const waterShapeScale = 0.99;
@@ -144,14 +147,14 @@ abstract class WaterShape {
 
     const waterGeo = shapeGeo.clone().scale(waterShapeScale, waterShapeScale, waterShapeScale);
 
-    this.waterBody = $solid.addSolid(waterGeo, 0x0f82f2, {clippingPlanes: [this.clippingPlane]});
+    this.waterBody = $solid.addSolid(waterGeo, this.waterColor, {clippingPlanes: [this.clippingPlane]});
     this.waterBody.position.set(center.x, center.y, center.z);
 
-    this.cap = $solid.addSolid(capGeo, 0x0f82f2);
+    this.cap = $solid.addSolid(capGeo, this.waterColor);
 
     this.waterLevel = 0;
 
-    const container = $solid.addOutlined(shapeGeo);
+    const container = this.addContainer(shapeGeo, $solid);
     container.position.set(center.x, center.y, center.z);
   }
 
@@ -161,6 +164,8 @@ abstract class WaterShape {
   }
 
   abstract geo(radius: number, height: number): THREE.Geometry;
+
+  abstract addContainer(geo: THREE.Geometry, $solid: Solid): O3D;
 
   private set waterLevel(waterLevel: number) {
     const newCapY = this.fillStart.y + waterLevel;
@@ -222,6 +227,10 @@ export class WaterCone extends WaterShape {
     return new THREE.ConeGeometry(radius, height, 128, 1);
   }
 
+  addContainer(geo: THREE.Geometry, $solid: Solid) {
+    return $solid.addOutlined(geo);
+  }
+
   waterHeightForFilledPercent(filledPercent: number) {
     const invPercent = 1 - filledPercent;
     return this.innerHeight - (((this.innerHeight ** 3) * invPercent) ** (1 / 3));
@@ -236,6 +245,10 @@ export class WaterCone extends WaterShape {
 export class WaterCylinder extends WaterShape {
   geo(radius: number, height: number) {
     return new THREE.CylinderGeometry(radius, radius, height, 128, 1);
+  }
+
+  addContainer(geo: THREE.Geometry, $solid: Solid) {
+    return $solid.addOutlined(geo);
   }
 
   waterHeightForFilledPercent(percent: number) {
@@ -262,6 +275,10 @@ export class WaterSphere extends WaterShape {
 
   geo(radius: number, _height: number) {
     return new THREE.SphereGeometry(radius, 32, 32);
+  }
+
+  addContainer(geo: THREE.Geometry, $solid: Solid) {
+    return $solid.addOutlined(geo);
   }
 
   waterHeightForFilledPercent(filledPercent: number) {

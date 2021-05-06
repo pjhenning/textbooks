@@ -265,6 +265,32 @@ export class Solid extends CustomElementView {
     return obj;
   }
 
+  addTranslucent(geo: THREE.Geometry, color = 0xaaaaaa, opacity = 0.1) {
+    const {obj} = Solid.makeTranslucent(geo, color, opacity);
+    this.addObj(obj);
+    return obj;
+  }
+
+  static makeTranslucent(geo: THREE.Geometry, color = 0xaaaaaa, opacity = 0.1) {
+    const translucentMaterial = Solid.translucentMaterial(color, opacity, {flatShading: false});
+    const mesh = new THREE.Mesh(geo, translucentMaterial);
+
+    const obj = new THREE.Object3D() as Object3D;
+    obj.add(mesh);
+
+    /* TODO: Cleanup/organize uses of this and .updateGeometry */
+    obj.setClipPlanes = function(planes: THREE.Plane[]) {
+      translucentMaterial.clippingPlanes = planes;
+    };
+
+    obj.updateGeometry = function(geo: THREE.Geometry) {
+      mesh.geometry.dispose();
+      mesh.geometry = geo;
+    };
+
+    return {obj, mesh};
+  }
+
   // TODO merge addOutlined() and addWireframe(), by looking at
   //      geometry.isConeGeometry etc.
 
@@ -272,29 +298,57 @@ export class Solid extends CustomElementView {
    * WARNING: Do not use before 'loaded' event has been triggered for this instance.
    * Add geometry rendered with translucent material and a solid border. */
   addOutlined(geo: THREE.Geometry, color = 0xaaaaaa, maxAngle = 5, opacity = 0.1, strokeColor?: number) {
-    const solidMaterial = Solid.translucentMaterial(color, opacity);
-    const solid = new THREE.Mesh(geo, solidMaterial);
+    const {obj} = Solid.makeOutlined(geo, color, maxAngle, opacity, strokeColor);
+    this.addObj(obj);
+    return obj;
+  }
+
+  static makeOutlined(geo: THREE.Geometry, color = 0xaaaaaa, maxAngle = 5, opacity = 0.1, strokeColor?: number) {
+    const translucent = this.makeTranslucent(geo, color, opacity);
 
     const edgeMaterial = new THREE.MeshBasicMaterial({color: strokeColor || STROKE_COLOR});
     let edges = createEdges(geo, edgeMaterial, maxAngle);
 
-    const obj = new THREE.Object3D() as Object3D;
-    obj.add(solid, edges);
+    translucent.obj.add(edges);
 
-    obj.setClipPlanes = function(planes: THREE.Plane[]) {
-      solidMaterial.clippingPlanes = planes;
-    };
-
-    obj.updateGeometry = function(geo: THREE.Geometry) {
-      solid.geometry.dispose();
-      solid.geometry = geo;
-      obj.remove(edges);
+    translucent.obj.updateGeometry = function(geo: THREE.Geometry) {
+      translucent.mesh.geometry.dispose();
+      translucent.mesh.geometry = geo;
+      translucent.obj.remove(edges);
       edges = createEdges(geo, edgeMaterial, maxAngle);
-      obj.add(edges);
+      translucent.obj.add(edges);
     };
 
-    this.addObj(obj);
-    return obj;
+    return translucent;
+  }
+
+  addKnockout(geo: THREE.Geometry, color = 0xaaaaaa, opacity = 0.1, strokeColor?:number) {
+    const translucent = Solid.makeTranslucent(geo, color, opacity);
+
+    const {knockoutMaterial, knockoutMesh} = Solid.makeKnockout(geo, strokeColor);
+    translucent.obj.add(knockoutMesh);
+
+    translucent.obj.setClipPlanes = function(planes: THREE.Plane[]) {
+      if (translucent.obj.setClipPlanes) translucent.obj.setClipPlanes(planes);
+      knockoutMaterial.clippingPlanes = planes;
+    };
+
+    translucent.obj.updateGeometry = function(geo: THREE.Geometry) {
+      if (translucent.obj.updateGeometry) translucent.obj.updateGeometry(geo);
+      knockoutMesh.geometry.dispose();
+      knockoutMesh.geometry = geo;
+    };
+
+    return translucent.obj;
+  }
+
+  static makeKnockout(geometry: THREE.Geometry, color?: number) {
+    const knockoutMaterial = new THREE.MeshBasicMaterial({
+      color: color ?? 0xffffff,
+      side: THREE.BackSide
+    });
+    const knockoutMesh = new THREE.Mesh(geometry, knockoutMaterial);
+    return {knockoutMaterial, knockoutMesh};
   }
 
   /**
@@ -302,7 +356,13 @@ export class Solid extends CustomElementView {
    * Like .addOutlined, but we also add outlines for curved edges (e.g. of
    * a sphere or cylinder). */
   addWireframe(geometry: THREE.Geometry, color = 0xaaaaaa, maxAngle = 5, opacity = 0.1) {
-    const solid = this.addOutlined(geometry, color, maxAngle, opacity);
+    const obj = Solid.makeWireframe(geometry, color, maxAngle, opacity);
+    this.addObj(obj);
+    return obj;
+  }
+
+  static makeWireframe(geometry: THREE.Geometry, color = 0xaaaaaa, maxAngle = 5, opacity = 0.1) {
+    const {obj} = this.makeOutlined(geometry, color, maxAngle, opacity);
 
     const outlineMaterial = new THREE.MeshBasicMaterial({
       color: STROKE_COLOR,
@@ -313,33 +373,27 @@ export class Solid extends CustomElementView {
       const customTransform = '\nvec3 transformed = position + vec3(normal) * 0.02;\n';
       shader.vertexShader = shader.vertexShader.replace(token, customTransform);
     };
-    const outline = new THREE.Mesh(geometry, outlineMaterial);
+    const wireframe = new THREE.Mesh(geometry, outlineMaterial);
 
-    const knockoutMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      side: THREE.BackSide
-    });
-    const knockout = new THREE.Mesh(geometry, knockoutMaterial);
+    const {knockoutMaterial, knockoutMesh} = this.makeKnockout(geometry);
 
-    const obj = new THREE.Object3D() as Object3D;
-    obj.add(solid, outline, knockout);
+    obj.add(wireframe, knockoutMesh);
 
     obj.setClipPlanes = function(planes: THREE.Plane[]) {
-      if (solid.setClipPlanes) solid.setClipPlanes(planes);
+      if (obj.setClipPlanes) obj.setClipPlanes(planes);
       for (const m of [outlineMaterial, knockoutMaterial]) {
         m.clippingPlanes = planes;
       }
     };
 
     obj.updateGeometry = function(geo: THREE.Geometry) {
-      if (solid.updateGeometry) solid.updateGeometry(geo);
-      for (const mesh of [outline, knockout]) {
+      if (obj.updateGeometry) obj.updateGeometry(geo);
+      for (const mesh of [wireframe, knockoutMesh]) {
         mesh.geometry.dispose();
         mesh.geometry = geo;
       }
     };
 
-    this.addObj(obj);
     return obj;
   }
 
@@ -347,29 +401,40 @@ export class Solid extends CustomElementView {
   // ---------------------------------------------------------------------------
   // Materials
 
-  private static commonMatOptions(color: number, opacity: number, clippingPlanes?: THREE.Plane[]) {
+  protected static commonMatSettings(
+      color: number,
+      opacity: number,
+      options?: {clippingPlanes?: THREE.Plane[], flatShading?: boolean}
+  ) {
+    const flatShading = options?.flatShading;
+    const clippingPlanes = options?.clippingPlanes;
     return {
       side: THREE.DoubleSide,
       transparent: true,
       color,
       opacity,
+      flatShading,
       clippingPlanes
     };
   }
 
   static solidMaterial(color: number, flatShading = false, clippingPlanes?: THREE.Plane[]) {
     return new THREE.MeshPhongMaterial({
-      ...this.commonMatOptions(color, 0.9, clippingPlanes),
-      specular: 0x222222,
-      // depthWrite: false,
-      flatShading
+      ...this.commonMatSettings(color, 0.9, {clippingPlanes, flatShading}),
+      specular: 0x222222
+      // depthWrite: false
     });
   }
 
-  static translucentMaterial(color: number, opacity = 0.1, clippingPlanes?: THREE.Plane[]) {
+  static translucentMaterial(
+      color: number,
+      opacity = 0.1,
+      options?: {clippingPlanes?: THREE.Plane[], flatShading?: boolean}
+  ) {
     return new THREE.MeshLambertMaterial({
-      ...this.commonMatOptions(color, opacity, clippingPlanes),
-      depthWrite: false
+      ...this.commonMatSettings(color, opacity, options),
+      depthWrite: false,
+      wireframeLinewidth: 0
     });
   }
 
